@@ -90,11 +90,50 @@ def bt_defaults():
 def run_backtest(body: dict):
     if sync.STATE.running:
         raise HTTPException(409, "동기화 중에는 성과검증을 실행할 수 없습니다")
+    name, ver = body.get("name"), body.get("ver")
+    cond, options = body.get("params"), body.get("bt")
+    if name:
+        record = store.get_cond(name, ver)
+        if not record:
+            raise HTTPException(404, f"조건식 없음: {name}")
+        cond, options, ver = record["params"], record["bt"], record["ver"]
     with _SCAN_LOCK:
         try:
-            return api.backtest(
-                body["d_from"], body.get("d_to"), body.get("params"),
-                body.get("bt"), include_trades=not body.get("summary", False),
-            )
+            result = api.backtest(body["d_from"], body.get("d_to"), cond, options,
+                include_trades=not body.get("summary", False))
         except Exception as error:
             raise HTTPException(400, f"{type(error).__name__}: {error}")
+    if result.get("ok") and name and body.get("save", True):
+        store.save_bt_result(name, ver, result)
+        result["saved_as"] = {"name": name, "ver": ver}
+    return result
+
+
+@app.get("/api/conds")
+def conds():
+    return {"conds": store.list_conds()}
+
+
+@app.post("/api/conds")
+def cond_save(body: dict):
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "이름이 필요합니다")
+    try:
+        cond = params.merge_cond(body.get("params"))
+        from . import backtest as bt
+        options = bt.merge_bt(body.get("bt"))
+    except Exception as error:
+        raise HTTPException(400, f"{type(error).__name__}: {error}")
+    return store.save_cond(name, cond, options, body.get("note", ""))
+
+
+@app.post("/api/conds/delete")
+def cond_delete(body: dict):
+    store.delete_cond(body["name"], body.get("ver"))
+    return {"ok": True}
+
+
+@app.get("/api/bt_results")
+def bt_results():
+    return {"results": store.recent_bt(50)}

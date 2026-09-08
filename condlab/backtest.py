@@ -35,7 +35,7 @@ _ENUM = {
     "strat": ("base59", "ma_cross"),
     "amt_mode": ("hloc4", "close"),
     "liq_basis": ("prev_amt", "cum_amt", "none"),
-    "vol_basis": ("cum", "none"),
+    "vol_basis": ("cum", "pace", "none"),
     "chg_basis": ("prev_c", "day_open"),
     "entry": ("signal_close", "next_open"),
     "bench": ("eqw", "none"),
@@ -128,7 +128,12 @@ def _pred(opt: dict) -> str:
     else:
         core = "n_slow = $slow AND pma_f IS NOT NULL AND pma_f <= pma_s AND ma_f > ma_s"
     change = "c / prev_c - 1" if opt["chg_basis"] == "prev_c" else "c / day_open - 1"
-    volume = "cum_v > prev_v * $vol_mult" if opt["vol_basis"] == "cum" else "TRUE"
+    volume = {
+        "cum": "cum_v > prev_v * $vol_mult",
+        "pace": ("cum_v > prev_v * $vol_mult"
+                 " * (date_diff('minute', TIME '09:00:00', t) / 380.0)"),
+        "none": "TRUE",
+    }[opt["vol_basis"]]
     liquidity = {
         "prev_amt": "prev_amt >= $min_amt",
         "cum_amt": "cum_amt >= $min_amt",
