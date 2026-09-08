@@ -8,7 +8,6 @@ import time
 from . import api, config
 
 BETA_COLS = ("beta60", "beta120", "beta250", "beta360")
-_READY = False
 _FWD = None
 
 SPECS = {
@@ -47,20 +46,16 @@ SPECS = {
 
 
 def _ensure(con):
-	global _READY, _FWD
 	if not config.FEAT_PQ.exists():
 		raise RuntimeError("feat.parquet 없음. features.build() 먼저 실행")
-	stamp = (con, config.FEAT_PQ, config.FEAT_PQ.stat().st_mtime_ns)
-	if _READY != stamp:
-		con.execute("CREATE OR REPLACE VIEW screen_feat AS SELECT * FROM "
-					f"read_parquet('{config.FEAT_PQ.as_posix()}')")
-		_READY, _FWD = stamp, None
+	con.execute("CREATE OR REPLACE VIEW screen_feat AS SELECT * FROM "
+				f"read_parquet('{config.FEAT_PQ.as_posix()}')")
 	return con
 
 
 def reset() -> None:
-	global _READY, _FWD
-	_READY, _FWD = False, None
+	global _FWD
+	_FWD = None
 
 
 def merge(name: str, user: dict | None = None) -> dict:
