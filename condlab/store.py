@@ -1,0 +1,1 @@
+"""Local DuckDB result store."""
