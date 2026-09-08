@@ -17,8 +17,8 @@ from .jma import step as jma_step
 BASE_CHG = 10.0     # 기준봉 최소 등락률(%)
 BASE_LOOK = 60      # 기준봉 탐색 최대 경과 거래일
 JMA_PARAM = (7, 50, 2)
-KS_CANDIDATES = ("KOSPI", "KS11", "KOSPI200", "0001", "001", "1")
-KQ_CANDIDATES = ("KOSDAQ", "KQ11", "1001", "101", "2")
+KS_CANDIDATES = ("U001", "KOSPI", "KS11", "KOSPI200", "0001")
+KQ_CANDIDATES = ("U201", "KOSDAQ", "KQ11", "1001")
 
 
 def _pq(path) -> str:
@@ -102,7 +102,7 @@ def _build_jma(con) -> int:
 
 def _beta_windows() -> tuple[str, str, str]:
 	sums, wins, cols = [], [], []
-	for size in (20, 120, 360):
+	for size in (20, 60, 120, 250, 360):
 		sums.append(f"""
 		count(rx) OVER b{size} AS n{size}b, sum(rx * rm) OVER b{size} AS sxy{size},
 		sum(rx) OVER b{size} AS sx{size}, sum(rm) OVER b{size} AS sy{size},
