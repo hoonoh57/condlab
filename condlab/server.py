@@ -162,7 +162,8 @@ def factor(body: dict):
         try:
             return factors.run(body["d_from"], body.get("d_to"), body.get("params"),
                                body.get("bt"), body.get("edge", 10.0),
-                               body.get("bins", 10))
+                               body.get("bins", 10), body.get("stop", 5.0),
+                               body.get("metric", "first"))
         except Exception as error:
             raise HTTPException(400, f"{type(error).__name__}: {error}")
 
@@ -177,6 +178,7 @@ def combo(body: dict):
             return cb.run(body["d_from"], body.get("d_to"), body.get("params"),
                           body.get("bt"), body.get("edge", 10.0),
                           body.get("min_keep", 8.0), body.get("depth", 3),
-                          body.get("keys"))
+                          body.get("keys"), body.get("stop", 5.0),
+                          body.get("metric", "first"))
         except Exception as error:
             raise HTTPException(400, f"{type(error).__name__}: {error}")

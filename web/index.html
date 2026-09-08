@@ -20,14 +20,14 @@
 <section id="perf" class="pane"><div class="card mb"><h3>성과검증</h3><div class="row"><div><label>조건식</label><select id="btCond"></select></div><div><label>시작일</label><input id="btFrom" type="date"></div><div><label>종료일</label><input id="btTo" type="date"></div><div><label>&nbsp;</label><button id="btRun">검증 실행</button></div></div><p class="k">선택한 조건식의 저장 파라미터로 실행하고 결과를 이력에 기록합니다.</p></div><div class="card mb"><h3>총평</h3><div id="btSum" class="grid"></div></div><div class="card mb"><h3>검색 종목 리스트</h3><table><thead id="btHead"></thead><tbody id="btBody"></tbody></table></div><div class="card"><h3>검증 이력</h3><table><thead><tr><th>실행</th><th>조건식</th><th>ver</th><th>구간</th><th>건수</th><th>상승%</th><th>승률%</th><th>평균수익</th><th>평균MFE</th><th>평균MAE</th><th>MFE10↑</th><th>정밀도%</th><th>재현율%</th><th>선별력x</th></tr></thead><tbody id="btHist"></tbody></table></div></section>
 <section id="factor"class="pane">
 <div class="card mb"><h3>요인분석 · 무엇이 고MFE를 예고하는가</h3>
-<div class="row"><div><label>시작일</label><input id="fxFrom" type="date"></div><div><label>종료일</label><input id="fxTo" type="date"></div><div><label>기준시각</label><input id="fxT" value="09:05:00"></div><div><label>목표 MFE%</label><input id="fxEdge" value="10"></div><div><label>분위 수</label><input id="fxBins" value="10"></div></div>
+<div class="row"><div><label>시작일</label><input id="fxFrom" type="date"></div><div><label>종료일</label><input id="fxTo" type="date"></div><div><label>기준시각</label><input id="fxT" value="09:05:00"></div><div><label>목표 MFE%</label><input id="fxEdge" value="10"></div><div><label>분위 수</label><input id="fxBins" value="10"></div><div><label>손절%</label><input id="fxStop" value="5"></div><div><label>지표</label><select id="fxMetric"><option value="first">선착률(권장)</option><option value="mfe">MFE 도달률</option></select></div></div>
 <button class="mt" id="fxRun">요인 스캔</button> <span id="fxMeta" class="k"></span></div>
-<div class="card mb"><h3>요인 순위 (상위분위 선별력 기준)</h3><table><thead><tr><th>요인</th><th>IC</th><th>상위분위 적중%</th><th>상위 선별력x</th><th>하위 선별력x</th></tr></thead><tbody id="fxRank"></tbody></table></div>
-<div class="card"><h3>분위별 상세</h3><div><label>요인 선택</label><select id="fxPick"></select></div><table><thead><tr><th>분위</th><th>표본</th><th>하한</th><th>상한</th><th>적중%</th><th>선별력x</th><th>평균MFE%</th><th>평균종료%</th></tr></thead><tbody id="fxBins2"></tbody></table></div>
+<div class="card mb"><h3>요인 순위 (상·하위 분위 적중률 기준)</h3><table><thead><tr><th>요인</th><th>IC</th><th>상위 적중%</th><th>상위 기대값%</th><th>하위 적중%</th><th>하위 기대값%</th></tr></thead><tbody id="fxRank"></tbody></table></div>
+<div class="card"><h3>분위별 상세</h3><div><label>요인 선택</label><select id="fxPick"></select></div><table><thead><tr><th>분위</th><th>표본</th><th>하한</th><th>상한</th><th>적중%</th><th>기대값%</th><th>평균MFE%</th><th>평균MAE%</th><th>평균종료%</th></tr></thead><tbody id="fxBins2"></tbody></table></div>
 <div class="card mt"><h3>요인 조합 탐색 · 컷을 쌓았을 때 실제 적중률</h3>
 <div class="row"><div><label>최소 하루 종목수</label><input id="cbKeep" value="8"></div><div><label>조합 깊이</label><input id="cbDepth" value="3"></div></div>
 <button class="mt" id="cbRun">조합 탐색</button> <span id="cbMeta" class="k"></span>
-<table class="mt"><thead><tr><th>단계</th><th>요인</th><th>방향</th><th>분위</th><th>절대컷</th><th>하루종목</th><th>적중%</th><th>선별력x</th><th>평균MFE%</th><th>평균종료%</th></tr></thead><tbody id="cbBody"></tbody></table></div>
+<table class="mt"><thead><tr><th>단계</th><th>요인</th><th>방향</th><th>분위</th><th>절대컷</th><th>하루종목</th><th>적중%</th><th>기대값%</th><th>고정컷 하루</th><th>고정컷 적중%</th></tr></thead><tbody id="cbBody"></tbody></table></div>
 </section>
 <section id="sweep" class="pane">
 <div class="card mb"><h3>조건탐색 (그리드) · KPI = 장종료 MFE 10%↑ 종목</h3>
@@ -101,29 +101,32 @@ const TABHINT={sync:'MySQL→parquet 적재. 데이터가 늘어나는 곳은 �
 document.querySelectorAll('.tab').forEach(t=>{const k=t.dataset.pane;if(TABNAME[k])t.textContent=TABNAME[k]});
 Object.entries(TABHINT).forEach(([k,v])=>{const p=document.getElementById(k);if(!p)return;const d=document.createElement('div');d.className='k';d.style.margin='0 0 10px';d.textContent=v;p.insertBefore(d,p.firstChild)});
 let FX=null;
+
+(async()=>{const s=await get('/api/status');if(s.daily?.d_max){$('#fxTo').value=s.daily.d_max;const d=new Date(s.daily.d_max);d.setDate(d.getDate()-60);$('#fxFrom').value=d.toISOString().slice(0,10)}})();
+</script>
+
+<script>
+function fxBody(){return {d_from:$('#fxFrom').value,d_to:$('#fxTo').value||null,bt:{t_from:$('#fxT').value},edge:parseFloat($('#fxEdge').value),stop:parseFloat($('#fxStop').value),metric:$('#fxMetric').value}}
 $('#fxRun').onclick=async()=>{
  if(!$('#fxFrom').value)return alert('시작일을 지정하세요');
  $('#fxMeta').textContent='실행 중...';$('#fxRank').innerHTML='';$('#fxBins2').innerHTML='';
- const r=await post('/api/factor',{d_from:$('#fxFrom').value,d_to:$('#fxTo').value||null,bt:{t_from:$('#fxT').value},edge:parseFloat($('#fxEdge').value),bins:parseInt($('#fxBins').value)});
+ const r=await post('/api/factor',Object.assign(fxBody(),{bins:parseInt($('#fxBins').value)}));
  if(!r.ok||!r.data.ok){$('#fxMeta').textContent='';return alert((r.data&&(r.data.detail||r.data.reason))||'실패')}
  FX=r.data;
- $('#fxMeta').textContent=`${FX.n_days}일 · 모집단 ${FX.n_pool} · MFE${FX.edge}%↑ 기저 ${FX.base_rate}% · ${FX.elapsed_sec}초`;
- $('#fxRank').innerHTML=FX.rank.map(x=>`<tr><td>${esc(x.label)}</td><td>${x.ic??'-'}</td><td>${x.top_hit??'-'}</td><td>${x.top_lift??'-'}</td><td>${x.bot_lift??'-'}</td></tr>`).join('');
+ $('#fxMeta').textContent=`${FX.n_days}일 · 모집단 ${FX.n_pool} · ${FX.metric_label} 기저 ${FX.base_rate}%`+(FX.neutral_rate?` · 무작위 기준선 ${FX.neutral_rate}%`:'')+` · ${FX.elapsed_sec}초`;
+ $('#fxRank').innerHTML=FX.rank.map(x=>`<tr><td>${esc(x.label)}</td><td>${x.ic??'-'}</td><td>${x.top_hit??'-'}</td><td>${x.top_ev??'-'}</td><td>${x.bot_hit??'-'}</td><td>${x.bot_ev??'-'}</td></tr>`).join('');
  $('#fxPick').innerHTML=FX.rank.map(x=>`<option value="${x.key}">${esc(x.label)}</option>`).join('');
  fxDraw();
 };
-function fxDraw(){if(!FX)return;const f=FX.factors[$('#fxPick').value];if(!f)return;$('#fxBins2').innerHTML=f.bins.map(b=>`<tr><td>${b.bin}</td><td>${b.n}</td><td>${b.lo}</td><td>${b.hi}</td><td>${b.hit}</td><td>${b.lift??'-'}</td><td>${b.avg_mfe}</td><td>${b.avg_eod}</td></tr>`).join('')}
+function fxDraw(){if(!FX)return;const f=FX.factors[$('#fxPick').value];if(!f)return;$('#fxBins2').innerHTML=f.bins.map(b=>`<tr><td>${b.bin}</td><td>${b.n}</td><td>${b.lo}</td><td>${b.hi}</td><td>${b.hit}</td><td>${b.ev}</td><td>${b.avg_mfe}</td><td>${b.avg_mae}</td><td>${b.avg_eod}</td></tr>`).join('')}
 $('#fxPick').onchange=fxDraw;
-(async()=>{const s=await get('/api/status');if(s.daily?.d_max){$('#fxTo').value=s.daily.d_max;const d=new Date(s.daily.d_max);d.setDate(d.getDate()-60);$('#fxFrom').value=d.toISOString().slice(0,10)}})();
-</script>
-<script>
 $('#cbRun').onclick=async()=>{
  if(!$('#fxFrom').value)return alert('위 요인분석의 시작일을 먼저 지정하세요');
  $('#cbMeta').textContent='탐색 중...';$('#cbBody').innerHTML='';
- const r=await post('/api/combo',{d_from:$('#fxFrom').value,d_to:$('#fxTo').value||null,bt:{t_from:$('#fxT').value},edge:parseFloat($('#fxEdge').value),min_keep:parseFloat($('#cbKeep').value),depth:parseInt($('#cbDepth').value)});
+ const r=await post('/api/combo',Object.assign(fxBody(),{min_keep:parseFloat($('#cbKeep').value),depth:parseInt($('#cbDepth').value)}));
  if(!r.ok||!r.data.ok){$('#cbMeta').textContent='';return alert((r.data&&(r.data.detail||r.data.reason))||'실패')}
- const d=r.data;$('#cbMeta').textContent=`${d.n_days}일 · 기저 ${d.base_rate}% · ${d.elapsed_sec}초`;
- $('#cbBody').innerHTML=(d.path||[]).map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.label)}</td><td>${x.side}</td><td>${Math.round(x.q*100)}%</td><td>${x.cut}</td><td>${x.n_day}</td><td>${x.hit}</td><td>${x.lift}</td><td>${x.avg_mfe}</td><td>${x.avg_eod}</td></tr>`).join('');
+ const d=r.data;$('#cbMeta').textContent=`${d.n_days}일 · 기저 ${d.base_rate}% · 무작위 ${d.neutral_rate}% · ${d.elapsed_sec}초`;
+ $('#cbBody').innerHTML=(d.path||[]).map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.label)}</td><td>${x.side}</td><td>${Math.round(x.q*100)}%</td><td>${x.cut}</td><td>${x.n_day}</td><td>${x.hit}</td><td>${x.ev??'-'}</td><td>${x.abs_n_day??'-'}</td><td>${x.abs_hit??'-'}</td></tr>`).join('');
 };
 </script>
 </body></html>
