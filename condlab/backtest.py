@@ -163,12 +163,13 @@ WITH ent AS (
 )
 SELECT e.iid, e.code, e.name, e.market, e.base_prev, e.prev_c, e.day_open,
        e.sig_t, e.e_t, e.e_px,
-       max(b.h) AS max_h, min(b.l) AS min_l,
+    coalesce(max(b.h) FILTER (WHERE b.t > e.e_t), max(e.e_px)) AS max_h,
+    coalesce(min(b.l) FILTER (WHERE b.t > e.e_t), max(e.e_px)) AS min_l,
        arg_max(b.c, b.t) AS eod_px,
        arg_max(b.c, b.t) FILTER (WHERE b.t <= e.e_t + to_minutes({opt['hold_min']})) AS hold_px,
        {marks},
-       min(b.t) FILTER (WHERE b.h >= e.e_px * (1 + $tp_pct)) AS tp_t,
-       min(b.t) FILTER (WHERE b.l <= e.e_px * (1 - $sl_pct)) AS sl_t,
+    min(b.t) FILTER (WHERE b.t > e.e_t AND b.h >= e.e_px * (1 + $tp_pct)) AS tp_t,
+    min(b.t) FILTER (WHERE b.t > e.e_t AND b.l <= e.e_px * (1 - $sl_pct)) AS sl_t,
        count(*) AS n_bars
 FROM ent e
 JOIN bars b ON b.iid = e.iid AND b.t >= e.e_t
@@ -204,6 +205,11 @@ def _pct(now, base):
     return None if now is None or not base else round((now / base - 1) * 100, 3)
 
 
+def _bind(sql: str, pool: dict) -> dict:
+    """SQL 본문에 실제로 등장하는 명명 파라미터만 골라 넘긴다."""
+    return {key: value for key, value in pool.items() if f"${key}" in sql}
+
+
 def _one_day(con, day, cond: dict, opt: dict) -> tuple[list, dict]:
     args = dict(cond)
     args.update({
@@ -211,25 +217,11 @@ def _one_day(con, day, cond: dict, opt: dict) -> tuple[list, dict]:
         "rpb": opt["require_prev_below"], "slow": opt["slow"],
         "tp_pct": opt["tp_pct"], "sl_pct": opt["sl_pct"],
     })
-    bars_args = {
-        "t_eod": args["t_eod"],
-        "ma_period": args["ma_period"],
-        "sec_class": args["sec_class"],
-        "market": args["market"],
-    }
-    con.execute(_bars_sql(day, opt), bars_args)
+    bars_sql = _bars_sql(day, opt)
+    con.execute(bars_sql, _bind(bars_sql, args))
     universe = con.execute("SELECT count(DISTINCT iid) FROM bars").fetchone()[0]
-    trades_args = {
-        key: args[key]
-        for key in (
-            "t_from", "t_until", "rpb", "chg_min", "chg_max",
-            "vol_mult", "min_price", "bull", "min_amt", "over_max",
-            "tp_pct", "sl_pct",
-        )
-    }
-    if opt["strat"] == "ma_cross":
-        trades_args["slow"] = args["slow"]
-    con.execute(_trades_sql(opt), trades_args)
+    trades_sql = _trades_sql(opt)
+    con.execute(trades_sql, _bind(trades_sql, args))
     rows = api._rows(con.execute("SELECT * FROM tr ORDER BY e_t, code"))
     series = _bench_series(con) if opt["bench"] == "eqw" else {}
     fee = opt["fee_pct"] * 100
