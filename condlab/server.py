@@ -165,3 +165,18 @@ def factor(body: dict):
                                body.get("bins", 10))
         except Exception as error:
             raise HTTPException(400, f"{type(error).__name__}: {error}")
+
+
+@app.post("/api/combo")
+def combo(body: dict):
+    if sync.STATE.running:
+        raise HTTPException(409, "동기화 중에는 조합탐색을 실행할 수 없습니다")
+    from . import combo as cb
+    with _SCAN_LOCK:
+        try:
+            return cb.run(body["d_from"], body.get("d_to"), body.get("params"),
+                          body.get("bt"), body.get("edge", 10.0),
+                          body.get("min_keep", 8.0), body.get("depth", 3),
+                          body.get("keys"))
+        except Exception as error:
+            raise HTTPException(400, f"{type(error).__name__}: {error}")

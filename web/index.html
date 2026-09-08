@@ -24,6 +24,10 @@
 <button class="mt" id="fxRun">요인 스캔</button> <span id="fxMeta" class="k"></span></div>
 <div class="card mb"><h3>요인 순위 (상위분위 선별력 기준)</h3><table><thead><tr><th>요인</th><th>IC</th><th>상위분위 적중%</th><th>상위 선별력x</th><th>하위 선별력x</th></tr></thead><tbody id="fxRank"></tbody></table></div>
 <div class="card"><h3>분위별 상세</h3><div><label>요인 선택</label><select id="fxPick"></select></div><table><thead><tr><th>분위</th><th>표본</th><th>하한</th><th>상한</th><th>적중%</th><th>선별력x</th><th>평균MFE%</th><th>평균종료%</th></tr></thead><tbody id="fxBins2"></tbody></table></div>
+<div class="card mt"><h3>요인 조합 탐색 · 컷을 쌓았을 때 실제 적중률</h3>
+<div class="row"><div><label>최소 하루 종목수</label><input id="cbKeep" value="8"></div><div><label>조합 깊이</label><input id="cbDepth" value="3"></div></div>
+<button class="mt" id="cbRun">조합 탐색</button> <span id="cbMeta" class="k"></span>
+<table class="mt"><thead><tr><th>단계</th><th>요인</th><th>방향</th><th>분위</th><th>절대컷</th><th>하루종목</th><th>적중%</th><th>선별력x</th><th>평균MFE%</th><th>평균종료%</th></tr></thead><tbody id="cbBody"></tbody></table></div>
 </section>
 <section id="sweep" class="pane">
 <div class="card mb"><h3>조건탐색 (그리드) · KPI = 장종료 MFE 10%↑ 종목</h3>
@@ -111,5 +115,15 @@ $('#fxRun').onclick=async()=>{
 function fxDraw(){if(!FX)return;const f=FX.factors[$('#fxPick').value];if(!f)return;$('#fxBins2').innerHTML=f.bins.map(b=>`<tr><td>${b.bin}</td><td>${b.n}</td><td>${b.lo}</td><td>${b.hi}</td><td>${b.hit}</td><td>${b.lift??'-'}</td><td>${b.avg_mfe}</td><td>${b.avg_eod}</td></tr>`).join('')}
 $('#fxPick').onchange=fxDraw;
 (async()=>{const s=await get('/api/status');if(s.daily?.d_max){$('#fxTo').value=s.daily.d_max;const d=new Date(s.daily.d_max);d.setDate(d.getDate()-60);$('#fxFrom').value=d.toISOString().slice(0,10)}})();
+</script>
+<script>
+$('#cbRun').onclick=async()=>{
+ if(!$('#fxFrom').value)return alert('위 요인분석의 시작일을 먼저 지정하세요');
+ $('#cbMeta').textContent='탐색 중...';$('#cbBody').innerHTML='';
+ const r=await post('/api/combo',{d_from:$('#fxFrom').value,d_to:$('#fxTo').value||null,bt:{t_from:$('#fxT').value},edge:parseFloat($('#fxEdge').value),min_keep:parseFloat($('#cbKeep').value),depth:parseInt($('#cbDepth').value)});
+ if(!r.ok||!r.data.ok){$('#cbMeta').textContent='';return alert((r.data&&(r.data.detail||r.data.reason))||'실패')}
+ const d=r.data;$('#cbMeta').textContent=`${d.n_days}일 · 기저 ${d.base_rate}% · ${d.elapsed_sec}초`;
+ $('#cbBody').innerHTML=(d.path||[]).map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.label)}</td><td>${x.side}</td><td>${Math.round(x.q*100)}%</td><td>${x.cut}</td><td>${x.n_day}</td><td>${x.hit}</td><td>${x.lift}</td><td>${x.avg_mfe}</td><td>${x.avg_eod}</td></tr>`).join('');
+};
 </script>
 </body></html>

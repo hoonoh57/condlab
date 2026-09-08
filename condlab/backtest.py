@@ -22,6 +22,9 @@ DEFAULT_BT = {
     "max_amt": 0,
     "max_price": 0,
     "orb_pad": 0.005,
+    "min_vola": 0.0,
+    "min_gap": -100.0,
+    "min_ext": -100.0,
     "fast": 5,
     "slow": 20,
     "hold_min": 30,
@@ -36,7 +39,7 @@ DEFAULT_BT = {
 
 _INT = ("require_prev_below", "fast", "slow", "hold_min",
         "max_amt", "max_price", "base_pool")
-_FLT = ("tp_pct", "sl_pct", "fee_pct", "orb_pad")
+_FLT = ("tp_pct", "sl_pct", "fee_pct", "orb_pad", "min_vola", "min_gap", "min_ext")
 _ENUM = {
     "strat": ("base59", "ma_cross", "hod"),
     "amt_mode": ("hloc4", "close"),
@@ -101,6 +104,8 @@ cum AS (
            sum(bamt) OVER w AS cum_amt,
            lag(c) OVER pw AS pc,
            max(h) OVER wp AS pre_h,
+           max(h) OVER wr AS run_h,
+           min(l) OVER wr AS run_l,
            lead(t) OVER pw AS next_t,
            lead(o) OVER pw AS next_o,
            avg(c) OVER wf AS ma_f,
@@ -110,6 +115,7 @@ cum AS (
     WINDOW
         pw AS (PARTITION BY iid ORDER BY t),
         wp AS (PARTITION BY iid ORDER BY t ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+        wr AS (PARTITION BY iid ORDER BY t ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
         w AS (PARTITION BY iid ORDER BY t ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
         wf AS (PARTITION BY iid ORDER BY t ROWS BETWEEN {opt['fast'] - 1} PRECEDING AND CURRENT ROW),
         ws AS (PARTITION BY iid ORDER BY t ROWS BETWEEN {opt['slow'] - 1} PRECEDING AND CURRENT ROW)
@@ -157,6 +163,12 @@ def _pred(opt: dict) -> str:
         caps += "    AND prev_amt <= $max_amt\n"
     if opt["max_price"]:
         caps += "    AND c <= $max_price\n"
+    if opt["min_vola"]:
+        caps += "    AND (run_h / nullif(run_l, 0) - 1) * 100 >= $min_vola\n"
+    if opt["min_gap"] > -100:
+        caps += "    AND (day_open / nullif(prev_c, 0) - 1) * 100 >= $min_gap\n"
+    if opt["min_ext"] > -100:
+        caps += "    AND (c / nullif(base_prev, 0) - 1) * 100 >= $min_ext\n"
     return f"""
     t >= CAST($t_from AS TIME) AND t <= CAST($t_until AS TIME)
     AND {core}
@@ -271,6 +283,7 @@ def _one_day(con, day, cond: dict, opt: dict) -> tuple[list, dict]:
         "tp_pct": opt["tp_pct"], "sl_pct": opt["sl_pct"],
         "max_amt": opt["max_amt"], "max_price": opt["max_price"],
         "orb_pad": opt["orb_pad"],
+        "min_vola": opt["min_vola"], "min_gap": opt["min_gap"], "min_ext": opt["min_ext"],
     })
     bars_sql = _bars_sql(day, opt)
     con.execute(bars_sql, _bind(bars_sql, args))

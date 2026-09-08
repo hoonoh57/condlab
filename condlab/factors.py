@@ -49,24 +49,17 @@ WHERE r.c > 0 AND r.el > 0
 """
 
 
-def run(d_from: str, d_to: str | None = None, params: dict | None = None,
-        bt_opt: dict | None = None, edge: float = 10.0, bins: int = 10) -> dict:
-    cond = P.merge_cond(params)
-    opt = bt.merge_bt(bt_opt)
-    edge = float(edge)
-    bins = max(2, min(20, int(bins)))
-    d_to = d_to or d_from
-    started = time.time()
-    con = api._con()
+def build_pool(con, d_from: str, d_to: str, cond: dict, opt: dict) -> list:
+    """기준시각 모집단 + 이후 MFE/종료수익 테이블 pf 생성."""
     bt._ensure_btctx(con, cond["ma_period"])
     days = [row[0] for row in con.execute(
         f"SELECT DISTINCT d FROM read_parquet('{Path(api.DAILY_PQ).as_posix()}') "
         "WHERE d BETWEEN ? AND ? ORDER BY d", [d_from, d_to]).fetchall()]
-    have = [day for day in days if (config.MIN1_DIR / f"d={day}").is_dir()
+    have = [day for day in days
+            if (config.MIN1_DIR / f"d={day}").is_dir()
             and any((config.MIN1_DIR / f"d={day}").glob("*.parquet"))]
     if not have:
-        return {"ok": False, "api": "factor", "reason": "분봉 데이터가 없습니다"}
-
+        return []
     cols = ", ".join(f"{expr} AS {key}" for key, (_, expr) in FACTORS.items())
     args = dict(cond)
     args.update({"t_from": opt["t_from"], "t_until": opt["t_until"],
@@ -79,7 +72,20 @@ def run(d_from: str, d_to: str | None = None, params: dict | None = None,
         con.execute(pool_sql, bt._bind(pool_sql, args))
         con.execute("CREATE OR REPLACE TABLE pf AS SELECT * FROM pool" if index == 0
                     else "INSERT INTO pf SELECT * FROM pool")
+    return have
 
+
+def run(d_from: str, d_to: str | None = None, params: dict | None = None,
+        bt_opt: dict | None = None, edge: float = 10.0, bins: int = 10) -> dict:
+    cond = P.merge_cond(params)
+    opt = bt.merge_bt(bt_opt)
+    edge = float(edge)
+    bins = max(2, min(20, int(bins)))
+    started = time.time()
+    con = api._con()
+    have = build_pool(con, d_from, d_to or d_from, cond, opt)
+    if not have:
+        return {"ok": False, "api": "factor", "reason": "분봉 데이터가 없습니다"}
     total, hits = con.execute(
         "SELECT count(*), count(*) FILTER (WHERE mfe >= ?) FROM pf", [edge]).fetchone()
     base = (100.0 * hits / total) if total else None
@@ -102,14 +108,13 @@ def run(d_from: str, d_to: str | None = None, params: dict | None = None,
         ic = con.execute(
             f"SELECT round(corr({key}, mfe), 4) FROM pf "
             f"WHERE {key} IS NOT NULL AND isfinite({key})").fetchone()[0]
-        top = rows[-1] if rows else {}
-        bottom = rows[0] if rows else {}
+        top, bottom = (rows[-1], rows[0]) if rows else ({}, {})
         out[key] = {"label": label, "ic": ic, "bins": rows,
                     "top_hit": top.get("hit"), "top_lift": top.get("lift"),
                     "bot_lift": bottom.get("lift")}
     rank = sorted(out.items(), key=lambda item: -(item[1]["top_lift"] or 0))
     return {
-        "ok": True, "api": "factor", "d_from": d_from, "d_to": str(d_to),
+        "ok": True, "api": "factor", "d_from": d_from, "d_to": str(d_to or d_from),
         "n_days": len(have), "n_pool": int(total), "edge": edge,
         "base_rate": round(base, 3) if base else None,
         "rank": [{"key": key, "label": value["label"], "ic": value["ic"],
