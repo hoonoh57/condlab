@@ -89,8 +89,10 @@ def scan(date: str, params: dict | None = None) -> dict:
 		},
 	}
 
-def backtest(d_from, d_to, cond_params, strat_params) -> dict:
-	raise NotImplementedError
+def backtest(d_from: str, d_to: str | None = None, params: dict | None = None,
+			 bt: dict | None = None, include_trades: bool = True) -> dict:
+	from . import backtest as _bt
+	return _bt.run(d_from, d_to, params, bt, include_trades)
 
 
 def _jsonable(v):
@@ -181,3 +183,8 @@ def reset() -> None:
 			pass
 	_CON = None
 	_CTX_MA = None
+	try:
+		from . import backtest as _bt
+		_bt.reset()
+	except Exception:
+		pass

@@ -78,3 +78,23 @@ def scan(body: dict):
             return api.scan(body["date"], body.get("params"))
         except Exception as error:
             raise HTTPException(400, f"{type(error).__name__}: {error}")
+
+
+@app.get("/api/bt_defaults")
+def bt_defaults():
+    from . import backtest as bt
+    return {"bt": bt.DEFAULT_BT}
+
+
+@app.post("/api/backtest")
+def run_backtest(body: dict):
+    if sync.STATE.running:
+        raise HTTPException(409, "동기화 중에는 성과검증을 실행할 수 없습니다")
+    with _SCAN_LOCK:
+        try:
+            return api.backtest(
+                body["d_from"], body.get("d_to"), body.get("params"),
+                body.get("bt"), include_trades=not body.get("summary", False),
+            )
+        except Exception as error:
+            raise HTTPException(400, f"{type(error).__name__}: {error}")
