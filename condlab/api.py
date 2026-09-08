@@ -89,11 +89,6 @@ def scan(date: str, params: dict | None = None) -> dict:
 		},
 	}
 
-
-def Copyscan(date: str, params: dict) -> dict:
-	raise NotImplementedError
-
-
 def backtest(d_from, d_to, cond_params, strat_params) -> dict:
 	raise NotImplementedError
 
