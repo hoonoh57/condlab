@@ -137,3 +137,17 @@ def cond_delete(body: dict):
 @app.get("/api/bt_results")
 def bt_results():
     return {"results": store.recent_bt(50)}
+
+@app.post("/api/sweep")
+def sweep(body: dict):
+    if sync.STATE.running:
+        raise HTTPException(409, "동기화 중에는 탐색을 실행할 수 없습니다")
+    from . import sweep as sw
+    with _SCAN_LOCK:
+        try:
+            return sw.run(
+                (body.get("name") or "sweep").strip(), body["d_from"], body.get("d_to"),
+                body["grid"], body.get("params"), body.get("bt"),
+                body.get("kpi") or sw.KPI, body.get("note", ""))
+        except Exception as error:
+            raise HTTPException(400, f"{type(error).__name__}: {error}")

@@ -15,10 +15,12 @@ DEFAULT_BT = {
     "t_eod": "15:30:00",
     "amt_mode": "hloc4",
     "liq_basis": "prev_amt",
-    "vol_basis": "cum",
+    "vol_basis": "pace",
     "chg_basis": "prev_c",
     "entry": "signal_close",
-    "require_prev_below": 1,
+    "require_prev_below": 0,
+    "max_amt": 0,
+    "max_price": 0,
     "fast": 5,
     "slow": 20,
     "hold_min": 30,
@@ -27,12 +29,15 @@ DEFAULT_BT = {
     "fee_pct": 0.0015,
     "bench": "eqw",
     "marks": [1, 3, 5, 10, 15, 30, 60],
+    "mfe_bins": [3, 5, 10, 20],
+    "base_pool": 1,
 }
 
-_INT = ("require_prev_below", "fast", "slow", "hold_min")
+_INT = ("require_prev_below", "fast", "slow", "hold_min",
+        "max_amt", "max_price", "base_pool")
 _FLT = ("tp_pct", "sl_pct", "fee_pct")
 _ENUM = {
-    "strat": ("base59", "ma_cross"),
+    "strat": ("base59", "ma_cross", "hod"),
     "amt_mode": ("hloc4", "close"),
     "liq_basis": ("prev_amt", "cum_amt", "none"),
     "vol_basis": ("cum", "pace", "none"),
@@ -58,6 +63,7 @@ def merge_bt(user: dict | None) -> dict:
         if out[key] not in allowed:
             raise ValueError(f"{key} must be one of {allowed}")
     out["marks"] = sorted({int(mark) for mark in out["marks"] if int(mark) > 0})
+    out["mfe_bins"] = sorted({float(b) for b in out["mfe_bins"] if float(b) > 0})
     if out["slow"] <= out["fast"]:
         raise ValueError("slow must be > fast")
     if out["hold_min"] < 1:
@@ -93,6 +99,7 @@ cum AS (
            sum(v) OVER w AS cum_v,
            sum(bamt) OVER w AS cum_amt,
            lag(c) OVER pw AS pc,
+           max(h) OVER wp AS pre_h,
            lead(t) OVER pw AS next_t,
            lead(o) OVER pw AS next_o,
            avg(c) OVER wf AS ma_f,
@@ -101,6 +108,7 @@ cum AS (
     FROM raw
     WINDOW
         pw AS (PARTITION BY iid ORDER BY t),
+        wp AS (PARTITION BY iid ORDER BY t ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
         w AS (PARTITION BY iid ORDER BY t ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
         wf AS (PARTITION BY iid ORDER BY t ROWS BETWEEN {opt['fast'] - 1} PRECEDING AND CURRENT ROW),
         ws AS (PARTITION BY iid ORDER BY t ROWS BETWEEN {opt['slow'] - 1} PRECEDING AND CURRENT ROW)
@@ -123,10 +131,14 @@ WINDOW pw2 AS (PARTITION BY k.iid ORDER BY k.t);
 
 
 def _pred(opt: dict) -> str:
-    if opt["strat"] == "base59":
-        core = "pc IS NOT NULL AND pc < base_prev AND c >= base_prev AND ($rpb = 0 OR prev_c < prev_ma)"
-    else:
-        core = "n_slow = $slow AND pma_f IS NOT NULL AND pma_f <= pma_s AND ma_f > ma_s"
+    cores = {
+        "base59": ("pc IS NOT NULL AND pc < base_prev AND c >= base_prev"
+                   " AND ($rpb = 0 OR prev_c < prev_ma)"),
+        "ma_cross": ("n_slow = $slow AND pma_f IS NOT NULL"
+                     " AND pma_f <= pma_s AND ma_f > ma_s"),
+        "hod": "pre_h IS NOT NULL AND c > pre_h",
+    }
+    core = cores[opt["strat"]]
     change = "c / prev_c - 1" if opt["chg_basis"] == "prev_c" else "c / day_open - 1"
     volume = {
         "cum": "cum_v > prev_v * $vol_mult",
@@ -139,6 +151,11 @@ def _pred(opt: dict) -> str:
         "cum_amt": "cum_amt >= $min_amt",
         "none": "TRUE",
     }[opt["liq_basis"]]
+    caps = ""
+    if opt["max_amt"]:
+        caps += "    AND prev_amt <= $max_amt\n"
+    if opt["max_price"]:
+        caps += "    AND c <= $max_price\n"
     return f"""
     t >= CAST($t_from AS TIME) AND t <= CAST($t_until AS TIME)
     AND {core}
@@ -147,7 +164,7 @@ def _pred(opt: dict) -> str:
     AND {change} BETWEEN $chg_min AND $chg_max
     AND {volume}
     AND {liquidity}
-    AND (c / base_prev - 1) * 100 <= $over_max
+{caps}    AND (c / base_prev - 1) * 100 <= $over_max
 """
 
 
@@ -210,6 +227,36 @@ def _pct(now, base):
     return None if now is None or not base else round((now / base - 1) * 100, 3)
 
 
+def _tag(bin_pct) -> str:
+    return ("%g" % float(bin_pct)).replace(".", "_")
+
+
+def _pool_sql(opt: dict) -> str:
+    """모집단(유동성 통과 전체) 기준 MFE 달성 종목 수 = 선별력의 분모."""
+    bins = ",\n       ".join(
+        f"count(*) FILTER (WHERE mh / px - 1 >= {float(b)} / 100.0) AS p{_tag(b)}"
+        for b in opt["mfe_bins"])
+    return f"""
+WITH ref AS (
+    SELECT iid, arg_max(c, t) AS px, max(t) AS rt
+    FROM bars
+    WHERE t <= CAST($t_from AS TIME) AND prev_amt >= $min_amt AND c >= $min_price
+    GROUP BY iid
+),
+mv AS (
+    SELECT r.iid, r.px, max(b.h) AS mh, arg_max(b.c, b.t) AS eod
+    FROM ref r JOIN bars b ON b.iid = r.iid AND b.t > r.rt
+    WHERE r.px > 0
+    GROUP BY r.iid, r.px
+)
+SELECT count(*) AS n_pool,
+       {bins},
+       round(avg(mh / px - 1) * 100, 3) AS pool_avg_mfe,
+       round(avg(eod / px - 1) * 100, 3) AS pool_avg_eod
+FROM mv
+"""
+
+
 def _bind(sql: str, pool: dict) -> dict:
     """SQL 본문에 실제로 등장하는 명명 파라미터만 골라 넘긴다."""
     return {key: value for key, value in pool.items() if f"${key}" in sql}
@@ -221,6 +268,7 @@ def _one_day(con, day, cond: dict, opt: dict) -> tuple[list, dict]:
         "t_from": opt["t_from"], "t_until": opt["t_until"], "t_eod": opt["t_eod"],
         "rpb": opt["require_prev_below"], "slow": opt["slow"],
         "tp_pct": opt["tp_pct"], "sl_pct": opt["sl_pct"],
+        "max_amt": opt["max_amt"], "max_price": opt["max_price"],
     })
     bars_sql = _bars_sql(day, opt)
     con.execute(bars_sql, _bind(bars_sql, args))
@@ -259,7 +307,15 @@ def _one_day(con, day, cond: dict, opt: dict) -> tuple[list, dict]:
                 if eod is not None:
                     record["alpha_eod_pct"] = round(eod - record["bench_eod_pct"], 3)
         trades.append(record)
-    return trades, {"d": str(day), "universe": int(universe), "n": len(trades)}
+    stat = {"d": str(day), "universe": int(universe), "n": len(trades)}
+    if opt["base_pool"]:
+        pool_sql = _pool_sql(opt)
+        cur = con.execute(pool_sql, _bind(pool_sql, args))
+        stat.update(dict(zip([col[0] for col in cur.description], cur.fetchone())))
+    for edge in opt["mfe_bins"]:
+        stat[f"n_mfe{_tag(edge)}"] = sum(
+            1 for trade in trades if (trade["mfe_pct"] or -999) >= edge)
+    return trades, stat
 
 
 def _avg(values):
@@ -307,6 +363,21 @@ def run(d_from: str, d_to: str | None = None, params: dict | None = None,
         "n_sl": sum(1 for trade in trades if trade["exit_kind"] == "SL"),
         "n_eod": sum(1 for trade in trades if trade["exit_kind"] == "EOD"),
     }
+    pool_n = sum(stat.get("n_pool") or 0 for stat in by_date)
+    summary["n_pool"] = pool_n
+    for edge in options["mfe_bins"]:
+        tag = _tag(edge)
+        hit = sum(1 for trade in trades if (trade["mfe_pct"] or -999) >= edge)
+        pool_hit = sum(stat.get(f"p{tag}") or 0 for stat in by_date)
+        base = (100.0 * pool_hit / pool_n) if pool_n else None
+        summary[f"n_mfe{tag}"] = hit
+        summary[f"per_day_mfe{tag}"] = round(hit / len(have), 2)
+        summary[f"rate_mfe{tag}"] = round(100.0 * hit / count, 2) if count else None
+        summary[f"pool_mfe{tag}"] = pool_hit
+        summary[f"recall_mfe{tag}"] = round(100.0 * hit / pool_hit, 2) if pool_hit else None
+        summary[f"base_mfe{tag}"] = round(base, 3) if base else None
+        summary[f"lift_mfe{tag}"] = (round((100.0 * hit / count) / base, 2)
+                                     if count and base else None)
     for mark in options["marks"]:
         summary[f"avg_r{mark}m"] = _avg([trade[f"r{mark}m"] for trade in trades])
     if options["bench"] == "eqw":

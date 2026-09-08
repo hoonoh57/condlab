@@ -254,12 +254,15 @@ def recent_bt(limit: int = 50) -> list[dict]:
 		try:
 			cur = con.execute(
 				"SELECT run_at, name, ver, d_from, d_to, n_days, n_trades, up_rate, "
-				"win_rate, avg_ret, avg_eod, avg_mfe, avg_mae, avg_alpha FROM bt_result "
-				"ORDER BY run_at DESC LIMIT ?", [limit])
+				"win_rate, avg_ret, avg_eod, avg_mfe, avg_mae, avg_alpha, summary "
+				"FROM bt_result ORDER BY run_at DESC LIMIT ?", [limit])
 			columns = [column[0] for column in cur.description]
 			result = []
 			for row in cur.fetchall():
 				record = dict(zip(columns, row))
+				extra = json.loads(record.pop("summary") or "{}")
+				for key in ("n_mfe10", "rate_mfe10", "recall_mfe10", "lift_mfe10"):
+					record[key] = extra.get(key)
 				record["run_at"] = record["run_at"].strftime("%m-%d %H:%M:%S")
 				for key in ("d_from", "d_to"):
 					record[key] = str(record[key])
