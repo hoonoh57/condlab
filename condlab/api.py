@@ -169,3 +169,15 @@ def health() -> dict:
 		"d_max": _jsonable(daily[3]),
 		"duckdb": duckdb.__version__,
 	}
+
+
+def reset() -> None:
+	"""parquet 갱신 후 캐시 무효화."""
+	global _CON, _CTX_MA
+	if _CON is not None:
+		try:
+			_CON.close()
+		except Exception:
+			pass
+	_CON = None
+	_CTX_MA = None
