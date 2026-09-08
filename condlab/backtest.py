@@ -41,7 +41,7 @@ _INT = ("require_prev_below", "fast", "slow", "hold_min",
         "max_amt", "max_price", "base_pool")
 _FLT = ("tp_pct", "sl_pct", "fee_pct", "orb_pad", "min_vola", "min_gap", "min_ext")
 _ENUM = {
-    "strat": ("base59", "ma_cross", "hod"),
+    "strat": ("base59", "ma_cross", "hod", "state"),
     "amt_mode": ("hloc4", "close"),
     "liq_basis": ("prev_amt", "cum_amt", "none"),
     "vol_basis": ("cum", "pace", "none"),
@@ -139,6 +139,7 @@ WINDOW pw2 AS (PARTITION BY k.iid ORDER BY k.t);
 
 def _pred(opt: dict) -> str:
     cores = {
+        "state": "TRUE",
         "base59": ("pc IS NOT NULL AND pc < base_prev AND c >= base_prev"
                    " AND ($rpb = 0 OR prev_c < prev_ma)"),
         "ma_cross": ("n_slow = $slow AND pma_f IS NOT NULL"
