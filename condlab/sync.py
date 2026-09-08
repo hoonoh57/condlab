@@ -142,6 +142,36 @@ def sync_daily(con, state: SyncState) -> None:
     state.say("종목마스터 갱신 완료")
 
 
+def sync_ref(con, state: SyncState) -> None:
+    """지수 일봉 + 시가총액(월말 스냅샷) 동기화."""
+    state.phase = "ref"
+    jobs = (
+        ("index.parquet", config.INDEX_PQ, """
+            SELECT index_code AS code, CAST(trading_date AS DATE) AS d,
+                   CAST(open AS DOUBLE) AS o, CAST(high AS DOUBLE) AS h,
+                   CAST(low AS DOUBLE) AS l, CAST(close AS DOUBLE) AS c,
+                   CAST(volume AS BIGINT) AS v
+            FROM my.market_index_daily ORDER BY index_code, trading_date"""),
+        ("mcap.parquet", config.MCAP_PQ, """
+            SELECT CAST(instrument_id AS INTEGER) AS iid,
+                   CAST(trading_date AS DATE) AS d,
+                   CAST(listed_shares AS BIGINT) AS listed_shares,
+                   CAST(market_cap AS BIGINT) AS market_cap
+            FROM my.korean_equity_market_cap ORDER BY instrument_id, trading_date"""),
+    )
+    for label, dest, query in jobs:
+        state.current = label
+        temp = _tmp_dir() / (label + ".tmp")
+        if temp.exists():
+            temp.unlink()
+        con.execute(f"COPY ({query}) TO '{temp.as_posix()}' "
+                    "(FORMAT parquet, COMPRESSION zstd)")
+        shutil.move(str(temp), str(dest))
+        count = con.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{dest.as_posix()}')").fetchone()[0]
+        state.say(f"{label} 갱신 완료 {count:,}행")
+
+
 def min1_extent(con) -> tuple:
     return mysql_rows(con, """
       SELECT MIN(trading_date), MAX(trading_date)
@@ -242,6 +272,7 @@ def _run(mode: str) -> None:
         state.say("MySQL 연결 OK")
         if mode in ("auto", "full", "daily"):
             sync_daily(con, state)
+            sync_ref(con, state)
         if mode in ("auto", "full", "min1"):
             low, high = min1_extent(con)
             state.say(f"MySQL 분봉 범위 {low} ~ {high}")

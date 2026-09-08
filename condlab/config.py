@@ -23,6 +23,11 @@ PQ_DIR      = Path(os.getenv("CONDLAB_PQ",  r"E:\pq"))
 DAILY_PQ    = PQ_DIR / "daily.parquet"
 INST_PQ     = PQ_DIR / "instrument.parquet"
 MIN1_DIR    = PQ_DIR / "min1"
+INDEX_PQ    = PQ_DIR / "index.parquet"
+MCAP_PQ     = PQ_DIR / "mcap.parquet"
+FEAT_PQ     = PQ_DIR / "feat.parquet"
+JMA_PQ      = PQ_DIR / "jma.parquet"
+
 
 STORE_DB    = Path(os.getenv("CONDLAB_STORE", str(ROOT / "data" / "condlab.duckdb")))
 
