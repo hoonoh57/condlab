@@ -182,3 +182,47 @@ def combo(body: dict):
                           body.get("metric", "first"))
         except Exception as error:
             raise HTTPException(400, f"{type(error).__name__}: {error}")
+
+
+@app.get("/api/screen/specs")
+def screen_specs():
+    from . import screens
+    return {"specs": screens.SPECS, "beta_cols": list(screens.BETA_COLS)}
+
+
+@app.post("/api/screen/run")
+def screen_run(body: dict):
+    if sync.STATE.running:
+        raise HTTPException(409, "동기화 중에는 조건검색을 실행할 수 없습니다")
+    from . import screens
+    with _SCAN_LOCK:
+        try:
+            return screens.run(body["screen"], body["d_from"], body.get("d_to"),
+                               body.get("params"), int(body.get("limit", 500)))
+        except Exception as error:
+            raise HTTPException(400, f"{type(error).__name__}: {error}")
+
+
+@app.post("/api/screen/verify")
+def screen_verify(body: dict):
+    if sync.STATE.running:
+        raise HTTPException(409, "동기화 중에는 성과검증을 실행할 수 없습니다")
+    from . import screens
+    with _SCAN_LOCK:
+        try:
+            return screens.verify(body["screen"], body["d_from"], body.get("d_to"),
+                                  body.get("params"),
+                                  body.get("marks") or (1, 3, 5, 10, 20))
+        except Exception as error:
+            raise HTTPException(400, f"{type(error).__name__}: {error}")
+
+
+@app.post("/api/features/build")
+def features_build():
+    if sync.STATE.running:
+        raise HTTPException(409, "동기화 중에는 지표빌드를 실행할 수 없습니다")
+    from . import features, screens
+    with _SCAN_LOCK:
+        result = features.build()
+        screens.reset()
+    return result
