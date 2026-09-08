@@ -21,6 +21,7 @@ DEFAULT_BT = {
     "require_prev_below": 0,
     "max_amt": 0,
     "max_price": 0,
+    "orb_pad": 0.005,
     "fast": 5,
     "slow": 20,
     "hold_min": 30,
@@ -35,7 +36,7 @@ DEFAULT_BT = {
 
 _INT = ("require_prev_below", "fast", "slow", "hold_min",
         "max_amt", "max_price", "base_pool")
-_FLT = ("tp_pct", "sl_pct", "fee_pct")
+_FLT = ("tp_pct", "sl_pct", "fee_pct", "orb_pad")
 _ENUM = {
     "strat": ("base59", "ma_cross", "hod"),
     "amt_mode": ("hloc4", "close"),
@@ -136,7 +137,7 @@ def _pred(opt: dict) -> str:
                    " AND ($rpb = 0 OR prev_c < prev_ma)"),
         "ma_cross": ("n_slow = $slow AND pma_f IS NOT NULL"
                      " AND pma_f <= pma_s AND ma_f > ma_s"),
-        "hod": "pre_h IS NOT NULL AND c > pre_h",
+        "hod": "pre_h IS NOT NULL AND c > pre_h * (1 + $orb_pad)",
     }
     core = cores[opt["strat"]]
     change = "c / prev_c - 1" if opt["chg_basis"] == "prev_c" else "c / day_open - 1"
@@ -269,6 +270,7 @@ def _one_day(con, day, cond: dict, opt: dict) -> tuple[list, dict]:
         "rpb": opt["require_prev_below"], "slow": opt["slow"],
         "tp_pct": opt["tp_pct"], "sl_pct": opt["sl_pct"],
         "max_amt": opt["max_amt"], "max_price": opt["max_price"],
+        "orb_pad": opt["orb_pad"],
     })
     bars_sql = _bars_sql(day, opt)
     con.execute(bars_sql, _bind(bars_sql, args))

@@ -151,3 +151,17 @@ def sweep(body: dict):
                 body.get("kpi") or sw.KPI, body.get("note", ""))
         except Exception as error:
             raise HTTPException(400, f"{type(error).__name__}: {error}")
+
+
+@app.post("/api/factor")
+def factor(body: dict):
+    if sync.STATE.running:
+        raise HTTPException(409, "동기화 중에는 요인분석을 실행할 수 없습니다")
+    from . import factors
+    with _SCAN_LOCK:
+        try:
+            return factors.run(body["d_from"], body.get("d_to"), body.get("params"),
+                               body.get("bt"), body.get("edge", 10.0),
+                               body.get("bins", 10))
+        except Exception as error:
+            raise HTTPException(400, f"{type(error).__name__}: {error}")

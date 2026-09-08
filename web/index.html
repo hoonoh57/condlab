@@ -10,7 +10,7 @@
 </head>
 <body>
 <header><h1>condlab</h1><span id="header" class="badge warn">확인 중...</span><span id="headerDetail" class="k"></span></header>
-<nav class="tabs"><div class="tab on" data-pane="dash">대시보드</div><div class="tab" data-pane="sync">데이터 동기화</div><div class="tab" data-pane="scan">조건검색</div><div class="tab" data-pane="cond">조건식 관리</div><div class="tab" data-pane="perf">성과검증</div><div class="tab" data-pane="sweep">조건탐색</div>
+<nav class="tabs"><div class="tab on" data-pane="dash">대시보드</div><div class="tab" data-pane="sync">데이터 동기화</div><div class="tab" data-pane="factor">2 요인분석</div><div class="tab" data-pane="scan">조건검색</div><div class="tab" data-pane="cond">조건식 관리</div><div class="tab" data-pane="perf">성과검증</div><div class="tab" data-pane="sweep">조건탐색</div>
 <div class="tab" data-pane="hist">작업이력</div></nav>
 <main>
 <section id="dash" class="pane on"><div class="grid"><div class="card"><div class="k">일봉 최종일</div><div id="dailyMax" class="v">-</div></div><div class="card"><div class="k">분봉 최종일</div><div id="minMax" class="v">-</div></div><div class="card"><div class="k">분봉 보유일수</div><div id="minDays" class="v">-</div></div><div class="card"><div class="k">분봉 행수</div><div id="minRows" class="v">-</div></div></div><div class="card mt"><h3>동기화 상태</h3><p id="todo">확인 중...</p><button id="runAuto">오늘 데이터 동기화</button><button class="ghost" id="goScan">조건검색으로 이동</button></div></section>
@@ -18,6 +18,13 @@
 <section id="scan" class="pane"><div class="card mb"><h3>조건검색</h3><div class="row"><div><label>기준일</label><input id="date" type="date"></div><div><label>종료일</label><input id="dateTo" type="date"></div><div><label>이평 기간</label><input id="ma" type="number" value="60"></div><div><label>등락률 최소</label><input id="chgMin" type="number" step=".01" value=".02"></div><div><label>등락률 최대</label><input id="chgMax" type="number" step=".01" value=".12"></div><div><label>거래량 배수</label><input id="vol" type="number" step=".1" value="1.5"></div><div><label>시장</label><select id="market"><option>ALL</option><option>KOSPI</option><option>KOSDAQ</option></select></div></div><button class="mt" id="scan">조건검색 실행</button><span id="scanMeta" class="k"></span></div><div class="card"><table><thead id="head"></thead><tbody id="body"></tbody></table></div></section>
 <section id="cond" class="pane"><div class="card mb"><h3>조건식 저장 (버전 자동 증가)</h3><div class="row"><div><label>이름</label><input id="cName" placeholder="ma60_breakout"></div><div><label>메모</label><input id="cNote"></div></div><div class="row mt"><div><label>조건 파라미터</label><textarea id="condParams" rows="12" style="width:100%;background:#0b1220;color:var(--fg);border:1px solid var(--line);border-radius:5px"></textarea></div><div><label>검증 옵션</label><textarea id="condBt" rows="12" style="width:100%;background:#0b1220;color:var(--fg);border:1px solid var(--line);border-radius:5px"></textarea></div></div><button class="mt" id="cSave">새 버전으로 저장</button> <button class="ghost mt" id="cReset">기본값 불러오기</button></div><div class="card"><h3>저장된 조건식</h3><table><thead><tr><th>이름</th><th>버전</th><th>메모</th><th>생성</th><th>동작</th></tr></thead><tbody id="condList"></tbody></table></div></section>
 <section id="perf" class="pane"><div class="card mb"><h3>성과검증</h3><div class="row"><div><label>조건식</label><select id="btCond"></select></div><div><label>시작일</label><input id="btFrom" type="date"></div><div><label>종료일</label><input id="btTo" type="date"></div><div><label>&nbsp;</label><button id="btRun">검증 실행</button></div></div><p class="k">선택한 조건식의 저장 파라미터로 실행하고 결과를 이력에 기록합니다.</p></div><div class="card mb"><h3>총평</h3><div id="btSum" class="grid"></div></div><div class="card mb"><h3>검색 종목 리스트</h3><table><thead id="btHead"></thead><tbody id="btBody"></tbody></table></div><div class="card"><h3>검증 이력</h3><table><thead><tr><th>실행</th><th>조건식</th><th>ver</th><th>구간</th><th>건수</th><th>상승%</th><th>승률%</th><th>평균수익</th><th>평균MFE</th><th>평균MAE</th><th>MFE10↑</th><th>정밀도%</th><th>재현율%</th><th>선별력x</th></tr></thead><tbody id="btHist"></tbody></table></div></section>
+<section id="factor"class="pane">
+<div class="card mb"><h3>요인분석 · 무엇이 고MFE를 예고하는가</h3>
+<div class="row"><div><label>시작일</label><input id="fxFrom" type="date"></div><div><label>종료일</label><input id="fxTo" type="date"></div><div><label>기준시각</label><input id="fxT" value="09:05:00"></div><div><label>목표 MFE%</label><input id="fxEdge" value="10"></div><div><label>분위 수</label><input id="fxBins" value="10"></div></div>
+<button class="mt" id="fxRun">요인 스캔</button> <span id="fxMeta" class="k"></span></div>
+<div class="card mb"><h3>요인 순위 (상위분위 선별력 기준)</h3><table><thead><tr><th>요인</th><th>IC</th><th>상위분위 적중%</th><th>상위 선별력x</th><th>하위 선별력x</th></tr></thead><tbody id="fxRank"></tbody></table></div>
+<div class="card"><h3>분위별 상세</h3><div><label>요인 선택</label><select id="fxPick"></select></div><table><thead><tr><th>분위</th><th>표본</th><th>하한</th><th>상한</th><th>적중%</th><th>선별력x</th><th>평균MFE%</th><th>평균종료%</th></tr></thead><tbody id="fxBins2"></tbody></table></div>
+</section>
 <section id="sweep" class="pane">
 <div class="card mb"><h3>조건탐색 (그리드) · KPI = 장종료 MFE 10%↑ 종목</h3>
 <div class="row"><div><label>저장 이름</label><input id="swName" value="mfe10_hunt"></div><div><label>시작일</label><input id="swFrom" type="date"></div><div><label>종료일</label><input id="swTo" type="date"></div><div><label>KPI 정렬</label><select id="swKpi"><option value="n_mfe10">MFE10↑ 건수</option><option value="rate_mfe10">정밀도%</option><option value="recall_mfe10">재현율%</option><option value="lift_mfe10">선별력(배)</option><option value="n_mfe20">MFE20↑ 건수</option></select></div></div>
@@ -83,5 +90,26 @@ $('#swRun').onclick=async()=>{
 };
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{if(t.dataset.pane==='sweep'&&!$('#swGrid').value)$('#swPreset').click()}));
 (async()=>{const s=await get('/api/status');if(s.daily?.d_max){$('#swTo').value=s.daily.d_max;const d=new Date(s.daily.d_max);d.setDate(d.getDate()-90);$('#swFrom').value=d.toISOString().slice(0,10)}})();
+</script>
+<script>
+const TABNAME={dash:'현황',sync:'1 데이터',factor:'2 요인분석',scan:'조건검색(0150)',cond:'3 조건식',perf:'4 성과검증(1516)',sweep:'5 조건탐색',hist:'로그'};
+const TABHINT={sync:'MySQL→parquet 적재. 데이터가 늘어나는 곳은 여기뿐입니다.',factor:'조건을 만들기 전에, 어떤 지표가 고MFE와 상관있는지 모집단 전체로 먼저 측정합니다.',scan:'특정 날짜의 일봉 기준 종목 목록. 보조 확인용입니다.',cond:'조건식을 버전으로 저장·삭제만 합니다. 실행은 하지 않습니다.',perf:'저장된 조건식을 분봉으로 검증합니다. 결과는 자동으로 로그에 남습니다.',sweep:'요인분석에서 고른 축만 격자로 돌립니다. 모든 조합이 조건식 버전으로 저장됩니다.'};
+document.querySelectorAll('.tab').forEach(t=>{const k=t.dataset.pane;if(TABNAME[k])t.textContent=TABNAME[k]});
+Object.entries(TABHINT).forEach(([k,v])=>{const p=document.getElementById(k);if(!p)return;const d=document.createElement('div');d.className='k';d.style.margin='0 0 10px';d.textContent=v;p.insertBefore(d,p.firstChild)});
+let FX=null;
+$('#fxRun').onclick=async()=>{
+ if(!$('#fxFrom').value)return alert('시작일을 지정하세요');
+ $('#fxMeta').textContent='실행 중...';$('#fxRank').innerHTML='';$('#fxBins2').innerHTML='';
+ const r=await post('/api/factor',{d_from:$('#fxFrom').value,d_to:$('#fxTo').value||null,bt:{t_from:$('#fxT').value},edge:parseFloat($('#fxEdge').value),bins:parseInt($('#fxBins').value)});
+ if(!r.ok||!r.data.ok){$('#fxMeta').textContent='';return alert((r.data&&(r.data.detail||r.data.reason))||'실패')}
+ FX=r.data;
+ $('#fxMeta').textContent=`${FX.n_days}일 · 모집단 ${FX.n_pool} · MFE${FX.edge}%↑ 기저 ${FX.base_rate}% · ${FX.elapsed_sec}초`;
+ $('#fxRank').innerHTML=FX.rank.map(x=>`<tr><td>${esc(x.label)}</td><td>${x.ic??'-'}</td><td>${x.top_hit??'-'}</td><td>${x.top_lift??'-'}</td><td>${x.bot_lift??'-'}</td></tr>`).join('');
+ $('#fxPick').innerHTML=FX.rank.map(x=>`<option value="${x.key}">${esc(x.label)}</option>`).join('');
+ fxDraw();
+};
+function fxDraw(){if(!FX)return;const f=FX.factors[$('#fxPick').value];if(!f)return;$('#fxBins2').innerHTML=f.bins.map(b=>`<tr><td>${b.bin}</td><td>${b.n}</td><td>${b.lo}</td><td>${b.hi}</td><td>${b.hit}</td><td>${b.lift??'-'}</td><td>${b.avg_mfe}</td><td>${b.avg_eod}</td></tr>`).join('')}
+$('#fxPick').onchange=fxDraw;
+(async()=>{const s=await get('/api/status');if(s.daily?.d_max){$('#fxTo').value=s.daily.d_max;const d=new Date(s.daily.d_max);d.setDate(d.getDate()-60);$('#fxFrom').value=d.toISOString().slice(0,10)}})();
 </script>
 </body></html>
